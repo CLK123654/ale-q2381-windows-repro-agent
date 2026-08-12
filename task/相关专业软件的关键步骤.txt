@@ -1,0 +1,7 @@
+1. 在MATLAB中使用readtable和jsondecode读取controls.csv、measurements.csv、uwb_beacons.csv和localization_contract.json，核对控制步与事件字段。
+2. 按arrival_step和event_id推进事件，以measurement_id识别重复量测，并依据合同处理未来样本和超窗样本。
+3. 调用propagate_midpoint按中点独轮车模型推进状态与协方差，航向使用atan2归一化。
+4. 调用replay_window从候选量测之前的历史状态重算到当前到达时刻，使用回放后的采样状态计算创新量和Mahalanobis距离。
+5. 调用joseph_measurement_update处理GPS位置观测与UWB距离观测，门控通过后提交回放历史并对称化协方差。
+6. 使用writetable和jsonencode输出状态轨迹、事件裁决、创新量、回放账本和汇总结果，再从状态轨迹生成SVG轨迹图。
+7. 核对各账本的event_id关联、终态不确定度和协方差状态，确认结果完整后替换正式results与figures目录。

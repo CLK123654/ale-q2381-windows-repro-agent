@@ -1,0 +1,71 @@
+name: q2381-windows-repro
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: reference或verify
+        required: false
+        default: verify
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      - uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2025b
+      - name: Capture runner
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version | ConvertTo-Json | Set-Content -Encoding utf8NoBOM evidence/runner.json
+          node --version | Set-Content -Encoding utf8NoBOM evidence/node-version.txt
+      - name: Generate Reference candidate
+        if: ${{ github.event.inputs.mode == 'reference' }}
+        uses: matlab-actions/run-command@v3
+        with:
+          command: addpath(fullfile(pwd,'qa')); generate_reference
+      - name: Upload Reference candidate
+        if: ${{ github.event.inputs.mode == 'reference' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: q2381-reference-candidate
+          path: reference-candidate.zip
+          if-no-files-found: error
+          retention-days: 1
+      - name: Verify attachment hashes
+        if: ${{ github.event.inputs.mode != 'reference' }}
+        shell: pwsh
+        run: python qa/verify_hashes.py
+      - name: Block formal network access
+        if: ${{ github.event.inputs.mode != 'reference' }}
+        shell: pwsh
+        run: |
+          $matlab = (Get-Command matlab).Source
+          New-NetFirewallRule -DisplayName ALE-Q2381-MATLAB-OUT -Direction Outbound -Program $matlab -Action Block | Out-Null
+      - name: Execute official MATLAB workflow
+        if: ${{ github.event.inputs.mode != 'reference' }}
+        uses: matlab-actions/run-command@v3
+        with:
+          command: addpath(fullfile(pwd,'qa')); verify_q2381
+      - name: Remove firewall rule
+        if: always()
+        shell: pwsh
+        run: Remove-NetFirewallRule -DisplayName ALE-Q2381-MATLAB-OUT -ErrorAction SilentlyContinue
+      - name: Upload Windows evidence
+        if: ${{ always() && github.event.inputs.mode != 'reference' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: q2381-windows-evidence
+          path: evidence/**
+          if-no-files-found: error
+          retention-days: 1
